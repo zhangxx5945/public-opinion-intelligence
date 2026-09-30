@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Browser sessions and downloaded model caches
+**/*_profile/
+**/browser_profile/
+models/
+.cache/
+
+# Runtime crawler output (curated datasets under data/ are tracked)
+/outputs/
+**/runtime/
+**/*.log
+**/*_progress.json
+**/*_checkpoint.csv
+**/*_checkpoint.json
+**/*.tmp
+
+# Jupyter / editors / OS
+.ipynb_checkpoints/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+~$*
+

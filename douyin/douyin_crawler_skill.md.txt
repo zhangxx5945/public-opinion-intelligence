@@ -1,0 +1,329 @@
+# 抖音关键词爬虫项目操作文档
+
+## 目标
+
+输入：
+
+- 关键词
+- 开始日期
+- 结束日期
+
+输出：
+
+- 视频/帖子标题
+- 发布日期
+- 链接
+- Excel 表格
+- CSV 表格
+
+## 推荐流程
+
+```text
+关键词 + 时间范围
+→ 打开抖音搜索页
+→ 滚动加载结果
+→ 收集视频/帖子链接
+→ 打开详情页
+→ 提取标题和发布日期
+→ 按日期筛选
+→ 导出 Excel / CSV
+```
+
+## 环境
+
+```text
+Windows
+Python 3.10
+Jupyter Notebook
+Microsoft Edge
+Playwright 同步 API
+```
+
+安装：
+
+```python
+%pip install playwright pandas openpyxl beautifulsoup4 python-dateutil
+```
+
+使用 Edge：
+
+```python
+browser = playwright.chromium.launch(
+    channel="msedge",
+    headless=False
+)
+```
+
+## 第一阶段：单个视频测试
+
+先创建 `extract_one_video.py`，目标是：
+
+```text
+输入一个视频链接
+→ 提取 video_id
+→ 提取标题
+→ 提取发布日期
+```
+
+Notebook 运行方式：
+
+```python
+import subprocess
+import sys
+
+VIDEO_URL = "https://www.douyin.com/jingxuan?modal_id=7659295044888792374"
+
+result = subprocess.run(
+    [
+        sys.executable,
+        "extract_one_video.py",
+        VIDEO_URL
+    ],
+    capture_output=True,
+    text=True,
+    encoding="utf-8",
+    errors="replace",
+    timeout=90
+)
+
+print(result.stdout)
+print(result.stderr or "无错误")
+print("退出代码：", result.returncode)
+```
+
+成功标准：
+
+```text
+退出代码：0
+http_status：200
+title：有内容
+published_at：有日期或为空
+```
+
+## 第二阶段：关键词搜索爬虫
+
+目标：
+
+```text
+输入关键词
+→ 打开 https://www.douyin.com/search/{关键词}
+→ 滚动搜索结果
+→ 收集 /video/、/note/、modal_id 链接
+→ 去重
+```
+
+需要保存字段：
+
+```text
+keyword
+search_rank
+content_id
+content_type
+url
+crawled_at
+```
+
+## 第三阶段：详情页提取
+
+每条内容提取：
+
+```text
+keyword
+search_rank
+content_id
+content_type
+title
+published_at
+published_raw
+time_precision
+in_date_range
+original_url
+final_url
+http_status
+crawled_at
+status
+error
+```
+
+标题提取优先级：
+
+```text
+og:title
+JSON-LD headline/name/description/caption
+og:description
+meta description
+page.title()
+```
+
+发布日期提取优先级：
+
+```text
+JSON-LD datePublished/uploadDate/dateCreated
+HTML createTime/publishTime
+10位或13位时间戳
+“于20260706发布在抖音”
+```
+
+## 第四阶段：日期筛选
+
+```python
+start_date <= published_date <= end_date
+```
+
+无法识别日期：
+
+```text
+in_date_range = False
+```
+
+但仍保存在“全部候选”表中。
+
+## 输出文件
+
+生成：
+
+```text
+douyin_results.xlsx
+douyin_results.csv
+checkpoint.csv
+crawler.log
+```
+
+Excel 工作表：
+
+```text
+日期范围内结果
+全部候选
+运行摘要
+```
+
+## Notebook 调用主程序
+
+```python
+import subprocess
+import sys
+
+KEYWORD = "人工智能"
+START_DATE = "2026-07-01"
+END_DATE = "2026-07-10"
+
+result = subprocess.run(
+    [
+        sys.executable,
+        "-u",
+        "main.py",
+        "--keyword",
+        KEYWORD,
+        "--start-date",
+        START_DATE,
+        "--end-date",
+        END_DATE,
+        "--max-results",
+        "20",
+        "--max-scrolls",
+        "8",
+        "--delay",
+        "3",
+        "--output",
+        "douyin_results.xlsx",
+    ],
+    capture_output=True,
+    text=True,
+    encoding="utf-8",
+    errors="replace",
+    timeout=1800,
+)
+
+print(result.stdout)
+print(result.stderr or "无错误")
+print("退出代码：", result.returncode)
+```
+
+## 给 Codex 的简化提示词
+
+```text
+请写一个 Python 脚本 main.py。
+
+功能：
+用户输入关键词、开始日期、结束日期，在抖音网页版公开搜索结果中收集相关视频或图文帖子，提取标题、发布日期和链接，按日期范围筛选，生成 Excel 和 CSV。
+
+环境：
+Windows、Python 3.10、Jupyter Notebook。
+脚本独立运行。
+使用 Playwright 同步 API。
+使用本机 Microsoft Edge：
+browser = playwright.chromium.launch(channel="msedge", headless=False)
+
+命令格式：
+python main.py --keyword "人工智能" --start-date "2026-07-01" --end-date "2026-07-10" --max-results 20 --max-scrolls 8 --delay 3 --output douyin_results.xlsx
+
+要求：
+1. 打开抖音搜索页。
+2. 滚动搜索结果。
+3. 收集 /video/、/note/、modal_id 链接。
+4. 按 content_id 去重。
+5. 逐条打开详情页。
+6. 提取标题和发布日期。
+7. 按日期范围筛选。
+8. 输出 Excel，包含“日期范围内结果”“全部候选”“运行摘要”。
+9. 同时输出 CSV。
+10. 每条详情页之间等待 3 秒。
+11. 遇到验证码、403、429 或访问频繁时停止。
+12. 不绕过验证码，不使用 stealth，不使用代理池，不逆向未公开接口。
+13. 使用 pandas、openpyxl、beautifulsoup4、python-dateutil。
+14. 添加日志和 checkpoint.csv。
+15. 给出 Notebook subprocess.run 调用示例。
+```
+
+## 注意事项
+
+只采集公开可见内容。
+
+遇到以下情况停止：
+
+```text
+验证码
+403
+429
+访问过于频繁
+安全验证
+```
+
+不要做：
+
+```text
+验证码识别
+登录绕过
+请求签名破解
+代理池规避
+stealth 指纹伪装
+未公开接口逆向
+```
+
+## 开发顺序
+
+```text
+1. 单个视频提取
+2. 关键词搜索链接发现
+3. 批量详情页提取
+4. 日期筛选
+5. Excel 导出
+6. checkpoint
+7. 日志
+8. 多关键词扩展
+```
+
+## 判断项目完成
+
+满足：
+
+```text
+能输入关键词和时间范围
+能打开搜索页
+能发现候选链接
+能提取标题
+能提取或记录发布日期为空
+能筛选日期
+能生成 Excel/CSV
+失败内容不会导致整个程序崩溃
+```
